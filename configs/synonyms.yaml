@@ -1,0 +1,55 @@
+# ──────────────────────────────────────────────────────────────
+#  configs/synonyms.yaml
+#  Synonym mappings applied during L0 normalization (Step 4).
+#
+#  Format:   "input phrase": "canonical form"
+#
+#  Rules:
+#    - Input phrases are matched AFTER lowercase + punctuation removal.
+#    - Replacements are applied left-to-right (order matters for overlaps).
+#    - Add domain-specific abbreviations as the system grows.
+#    - Hot-reload: send SIGHUP or POST /admin/reload-policies.
+# ──────────────────────────────────────────────────────────────
+
+synonyms:
+
+  # ── Geographic ────────────────────────────────────────────────
+  "nyc":          "new york city"
+  "ny":           "new york"
+  "la":           "los angeles"
+  "sf":           "san francisco"
+  "dc":           "washington dc"
+  "uk":           "united kingdom"
+  "us":           "united states"
+  "usa":          "united states"
+
+  # ── Technology ────────────────────────────────────────────────
+  "ml":           "machine learning"
+  "ai":           "artificial intelligence"
+  "llm":          "large language model"
+  "nlp":          "natural language processing"
+  "cv":           "computer vision"
+  "db":           "database"
+  "k8s":          "kubernetes"
+  "js":           "javascript"
+  "ts":           "typescript"
+  "py":           "python"
+  "os":           "operating system"
+  "api":          "application programming interface"
+
+  # ── Finance ───────────────────────────────────────────────────
+  "btc":          "bitcoin"
+  "eth":          "ethereum"
+  "s&p":          "s&p 500"
+  "sp500":        "s&p 500"
+
+  # ── Common abbreviations ───────────────────────────────────────
+  "vs":           "versus"
+  "w/":           "with"
+  "w/o":          "without"
+  "approx":       "approximately"
+  "asap":         "as soon as possible"
+  "fyi":          "for your information"
+  "imo":          "in my opinion"
+  "iirc":         "if i recall correctly"
+  "afaik":        "as far as i know"

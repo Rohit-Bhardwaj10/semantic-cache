@@ -1,0 +1,39 @@
+global:
+  scrape_interval:     15s   # How often to scrape targets
+  evaluation_interval: 15s   # How often to evaluate rules
+  scrape_timeout:      10s
+
+# ── Rule files ───────────────────────────────────────────────
+rule_files:
+  - "/etc/prometheus/alerts.yml"   # loaded when configs/alerts.yaml is mounted (Phase 4)
+
+# ── Alertmanager (Phase 4 — uncomment when configured) ───────
+# alerting:
+#   alertmanagers:
+#     - static_configs:
+#         - targets: ['alertmanager:9093']
+
+# ── Scrape configs ────────────────────────────────────────────
+scrape_configs:
+
+  # semantic-cache proxy — exposes /metrics on port 9090
+  - job_name: "semantic-cache"
+    static_configs:
+      - targets: ["cache-proxy:9090"]
+    metrics_path: /metrics
+    scrape_interval: 10s
+
+  # Prometheus self-monitoring
+  - job_name: "prometheus"
+    static_configs:
+      - targets: ["localhost:9090"]
+
+  # Redis exporter (add redis-exporter service in Phase 4 for richer metrics)
+  # - job_name: "redis"
+  #   static_configs:
+  #     - targets: ["redis-exporter:9121"]
+
+  # Postgres exporter (add postgres-exporter service in Phase 4)
+  # - job_name: "postgres"
+  #   static_configs:
+  #     - targets: ["postgres-exporter:9187"]

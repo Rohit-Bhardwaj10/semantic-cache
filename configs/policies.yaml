@@ -1,0 +1,72 @@
+# ──────────────────────────────────────────────────────────────
+#  configs/policies.yaml
+#  Per-domain cache policy configuration.
+#
+#  Fields:
+#    min_similarity        — cosine similarity hard gate (0–1).
+#                            Queries below this are NEVER served from L2b.
+#    max_staleness_seconds — maximum age of a cached answer to consider.
+#    confidence_threshold  — minimum score from CalculateConfidence()
+#                            required to serve a cached answer.
+#    sim_weight            — weight of similarity in additive formula.
+#    fresh_weight          — weight of freshness in additive formula.
+#                            sim_weight + fresh_weight should equal 1.0.
+#
+#  Hot-reload: send SIGHUP to the proxy process or POST /admin/reload-policies.
+#  Changes take effect immediately — no restart required.
+# ──────────────────────────────────────────────────────────────
+
+# ── Time-sensitive domains (high freshness weight) ─────────────
+
+weather:
+  min_similarity:         0.88
+  max_staleness_seconds:  1800    # 30 minutes
+  confidence_threshold:   0.72
+  sim_weight:             0.40
+  fresh_weight:           0.60
+
+finance:
+  min_similarity:         0.90
+  max_staleness_seconds:  900     # 15 minutes — prices move fast
+  confidence_threshold:   0.75
+  sim_weight:             0.35
+  fresh_weight:           0.65
+
+news:
+  min_similarity:         0.85
+  max_staleness_seconds:  3600    # 1 hour
+  confidence_threshold:   0.70
+  sim_weight:             0.40
+  fresh_weight:           0.60
+
+# ── Stable knowledge domains (high similarity weight) ──────────
+
+coding:
+  min_similarity:         0.82
+  max_staleness_seconds:  604800  # 7 days — APIs change slowly
+  confidence_threshold:   0.68
+  sim_weight:             0.70
+  fresh_weight:           0.30
+
+medical:
+  min_similarity:         0.92    # Very strict — wrong answers are dangerous
+  max_staleness_seconds:  86400   # 24 hours
+  confidence_threshold:   0.80
+  sim_weight:             0.60
+  fresh_weight:           0.40
+
+legal:
+  min_similarity:         0.92
+  max_staleness_seconds:  86400
+  confidence_threshold:   0.80
+  sim_weight:             0.60
+  fresh_weight:           0.40
+
+# ── Default (fallback for unclassified domains) ─────────────────
+
+general:
+  min_similarity:         0.85
+  max_staleness_seconds:  3600    # 1 hour
+  confidence_threshold:   0.70
+  sim_weight:             0.50
+  fresh_weight:           0.50

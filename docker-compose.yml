@@ -1,0 +1,166 @@
+version: "3.9"
+
+# ──────────────────────────────────────────────────────────────
+#  semantic-cache — local development environment
+#  Start everything:  docker-compose up -d
+#  Tear down + wipe:  docker-compose down -v
+#  Logs:              docker-compose logs -f cache-proxy
+# ──────────────────────────────────────────────────────────────
+
+services:
+
+  # ── 1. Semantic Cache Proxy ───────────────────────────────────
+  cache-proxy:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: semantic-cache-proxy
+    ports:
+      - "8080:8080"   # HTTP API
+      - "9090:9090"   # Prometheus metrics
+    environment:
+      # ── Infra ───────────────────────────────────────
+      REDIS_URL:         "redis:6379"
+      POSTGRES_URL:      "postgres://cache:cache@postgres:5432/cache?sslmode=disable"
+      OLLAMA_URL:        "http://ollama:11434"
+      BACKEND_URL:       "http://mock-backend:8081"
+      # ── L1 cache ────────────────────────────────────
+      L1_MAX_BYTES:      "134217728"   # 128 MB
+      L1_DEFAULT_TTL:    "3600"        # seconds
+      # ── Circuit breaker ─────────────────────────────
+      CB_MAX_FAILURES:   "5"
+      CB_TIMEOUT:        "30s"
+      # ── Auth ────────────────────────────────────────
+      JWT_SECRET:        "dev-secret-change-in-prod"
+      # ── Observability ───────────────────────────────
+      LOG_LEVEL:         "info"
+      # ── Rate limiting ───────────────────────────────
+      RATE_LIMIT_RPM:    "1000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    restart: unless-stopped
+    networks:
+      - cache-net
+
+  # ── 2. PostgreSQL 16 + pgvector ───────────────────────────────
+  postgres:
+    image: pgvector/pgvector:pg16
+    container_name: semantic-cache-postgres
+    environment:
+      POSTGRES_DB:       cache
+      POSTGRES_USER:     cache
+      POSTGRES_PASSWORD: cache
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      # Auto-apply migrations on first container start
+      - ./migrations:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cache -d cache"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - cache-net
+
+  # ── 3. Redis 7.2 ─────────────────────────────────────────────
+  redis:
+    image: redis:7.2-alpine
+    container_name: semantic-cache-redis
+    command: >
+      redis-server
+      --appendonly yes
+      --appendfsync everysec
+      --maxmemory 256mb
+      --maxmemory-policy allkeys-lru
+    volumes:
+      - redisdata:/data
+    ports:
+      - "6379:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
+    restart: unless-stopped
+    networks:
+      - cache-net
+
+  # ── 4. Ollama (embedding inference) ──────────────────────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: semantic-cache-ollama
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollamadata:/root/.ollama
+    # NOTE: After first start, pull the embedding model:
+    #   docker exec semantic-cache-ollama ollama pull nomic-embed-text
+    # Or run:  make ollama-pull
+    restart: unless-stopped
+    networks:
+      - cache-net
+
+  # ── 5. Prometheus ─────────────────────────────────────────────
+  prometheus:
+    image: prom/prometheus:latest
+    container_name: semantic-cache-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
+      - "--web.enable-lifecycle"    # enables POST /-/reload
+    volumes:
+      - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheusdata:/prometheus
+    ports:
+      - "9091:9090"   # Prometheus UI at http://localhost:9091
+    restart: unless-stopped
+    networks:
+      - cache-net
+
+  # ── 6. Grafana ────────────────────────────────────────────────
+  grafana:
+    image: grafana/grafana:latest
+    container_name: semantic-cache-grafana
+    ports:
+      - "3000:3000"   # Grafana UI at http://localhost:3000
+    environment:
+      GF_SECURITY_ADMIN_USER:     admin
+      GF_SECURITY_ADMIN_PASSWORD: admin
+      GF_USERS_ALLOW_SIGN_UP:    "false"
+      # Auto-provision Prometheus datasource
+      GF_DATASOURCES_DEFAULT_NAME:   Prometheus
+      GF_DATASOURCES_DEFAULT_TYPE:   prometheus
+      GF_DATASOURCES_DEFAULT_URL:    http://prometheus:9090
+    volumes:
+      - grafanadata:/var/lib/grafana
+      - ./configs/grafana/provisioning:/etc/grafana/provisioning:ro
+    depends_on:
+      - prometheus
+    restart: unless-stopped
+    networks:
+      - cache-net
+
+# ── Networks ──────────────────────────────────────────────────
+networks:
+  cache-net:
+    driver: bridge
+
+# ── Volumes ───────────────────────────────────────────────────
+volumes:
+  pgdata:
+  redisdata:
+  ollamadata:
+  prometheusdata:
+  grafanadata:
