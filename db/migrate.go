@@ -22,6 +22,8 @@ import (
 //	if err := db.Migrate(ctx, pool, "./migrations"); err != nil {
 //	    log.Fatal("migration failed:", err)
 //	}
+
+
 func Migrate(ctx context.Context, pool *pgxpool.Pool, migrationsDir string) error {
 	// Ensure the tracking table exists.
 	if err := ensureMigrationsTable(ctx, pool); err != nil {

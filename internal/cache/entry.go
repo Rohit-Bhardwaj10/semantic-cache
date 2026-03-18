@@ -1,23 +1,43 @@
 package cache
 
-import (
-	"fmt"
-	"os"
-	"path/filepath"
-)
+import "time"
 
-type Entry struct {
-	Path string
+// CacheEntry represents a single cached query-answer pair stored in Postgres.
+// Fields mirror the cache_entries table columns defined in 001_initial_schema.sql.
+type CacheEntry struct {
+	ID             int64     `db:"id"`
+	TenantID       string    `db:"tenant_id"`
+	QueryRaw       string    `db:"query_raw"`
+	QueryNormalized string   `db:"query_normalized"`
+	QueryHash      string    `db:"query_hash"`
+	QueryDomain    string    `db:"query_domain"`
+	Answer         string    `db:"answer"`
+	// Embedding is omitted here; retrieved only when needed for similarity search.
+	EmbedModel     string    `db:"embed_model"`
+	EmbedVersion   string    `db:"embed_version"`
+	Similarity     float32   `db:"-"` // populated at query time, not stored
+	Confidence     float32   `db:"-"` // computed by policy engine, not stored
+	TTLSeconds     int       `db:"ttl_seconds"`
+	CreatedAt      time.Time `db:"created_at"`
+	LastAccessedAt time.Time `db:"last_accessed_at"`
+	AccessCount    int       `db:"access_count"`
 }
 
-func NewEntry(path string) (*Entry, error) {
-	if !filepath.IsAbs(path) {
-		return nil, fmt.Errorf("path must be absolute")
+// IsExpired reports whether this entry has outlived its TTL.
+// A TTL of 0 means the entry never expires.
+func (e *CacheEntry) IsExpired() bool {
+	if e.TTLSeconds == 0 {
+		return false
 	}
+	expiresAt := e.CreatedAt.Add(time.Duration(e.TTLSeconds) * time.Second)
+	return time.Now().After(expiresAt)
+}
 
-	if _, err := os.Stat(path); os.IsNotExist(err) {
-		return nil, fmt.Errorf("path does not exist")
+// AgeSeconds returns the number of seconds since the entry was created.
+func (e *CacheEntry) AgeSeconds() int {
+	d := time.Since(e.CreatedAt)
+	if d < 0 {
+		return 0
 	}
-
-	return &Entry{Path: path}, nil
+	return int(d.Seconds())
 }
