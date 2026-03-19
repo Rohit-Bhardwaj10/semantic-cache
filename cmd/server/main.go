@@ -12,8 +12,10 @@ import (
 	"time"
 
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/api"
+	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/audit"
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/backend"
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/cache"
+	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/metrics"
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/policy"
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/resilience"
 	"github.com/Rohit-Bhardwaj10/semantic-cache/pkg/embeddings"
@@ -61,6 +63,8 @@ func main() {
 	// 4. Initialize Core Tiers
 	l1 := cache.NewL1Cache(l1MaxBytes)
 	l2b := cache.NewL2bCache(pgPool, "nomic-embed-text", "v1")
+	auditLogger := audit.NewLogger()
+	promMetrics := metrics.InitMetrics()
 	
 	breaker := resilience.NewCircuitBreaker(5, 30*time.Second)
 	ollamaClient := embeddings.NewOllamaClient(ollamaURL, "nomic-embed-text", l2a.Client, breaker)
@@ -79,6 +83,8 @@ func main() {
 		Classifier: classifier,
 		Backend:    backendClient,
 		Breaker:    breaker,
+		Audit:      auditLogger,
+		Metrics:    promMetrics,
 	})
 
 	// 6. Start Lifecycle Tasks

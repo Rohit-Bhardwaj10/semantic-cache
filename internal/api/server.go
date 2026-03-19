@@ -26,10 +26,13 @@ func NewServer(addr string, coord *cache.Coordinator) *Server {
 
 	// Register routes
 	mux.HandleFunc("/cache/query", h.HandleQuery)
+	mux.HandleFunc("/cache/stream", h.HandleStreamQuery)
 	mux.HandleFunc("/health", h.HandleHealth)
 	mux.HandleFunc("/readyz", h.HandleHealth)
 	mux.HandleFunc("/livez", h.HandleHealth)
 	mux.HandleFunc("/analytics/cost-savings", h.HandleAnalytics)
+	mux.HandleFunc("/feedback", h.HandleFeedback)
+	mux.HandleFunc("/metrics", h.HandleMetrics)
 	
 	// Admin routes
 	mux.HandleFunc("/admin/invalidate", h.HandleAdminInvalidate)

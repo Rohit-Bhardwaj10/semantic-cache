@@ -6,9 +6,11 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/api"
+	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/audit"
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/backend"
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/cache"
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/policy"
@@ -121,4 +123,81 @@ func (m *mockBackend) Query(ctx context.Context, query string) (*backend.Respons
 		Answer: m.answer,
 		Model:  "mock-gpt",
 	}, nil
+}
+
+func TestAPI_InputValidation(t *testing.T) {
+	h := api.NewHandler(nil)
+	
+	// Case 1: Oversized query
+	bigQuery := ""
+	for i := 0; i < 3000; i++ {
+		bigQuery += "a"
+	}
+	
+	reqBody, _ := json.Marshal(api.QueryRequest{Query: bigQuery})
+	r := httptest.NewRequest("POST", "/cache/query", bytes.NewBuffer(reqBody))
+	w := httptest.NewRecorder()
+	
+	h.HandleQuery(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected 400 for oversized query, got %d", w.Code)
+	}
+
+	// Case 2: Empty query
+	reqBody, _ = json.Marshal(api.QueryRequest{Query: ""})
+	r = httptest.NewRequest("POST", "/cache/query", bytes.NewBuffer(reqBody))
+	w = httptest.NewRecorder()
+	h.HandleQuery(w, r)
+	if w.Code != http.StatusBadRequest {
+		t.Errorf("Expected 400 for empty query, got %d", w.Code)
+	}
+}
+
+func TestAPI_Feedback(t *testing.T) {
+	h := api.NewHandler(nil)
+	fbBody := map[string]interface{}{
+		"request_id": "req-123",
+		"correct":    true,
+	}
+	data, _ := json.Marshal(fbBody)
+	r := httptest.NewRequest("POST", "/feedback", bytes.NewBuffer(data))
+	w := httptest.NewRecorder()
+	
+	h.HandleFeedback(w, r)
+	if w.Code != http.StatusAccepted {
+		t.Errorf("Expected 202, got %d", w.Code)
+	}
+}
+
+func TestAPI_Streaming(t *testing.T) {
+	l1 := cache.NewL1Cache(1024)
+	l1.Set("default", "hello", "world is beautiful", 0)
+	
+	coord := cache.NewCoordinator(cache.Config{
+		L1:         l1,
+		Normalizer: cache.NewNormalizer(),
+		Classifier: policy.NewDomainClassifier(),
+		Audit:      audit.NewLogger(),
+	})
+	srv := api.NewServer(":8080", coord)
+
+	// Since NewServer handles the finalHandler, we use srv.ServeHTTP
+	r := httptest.NewRequest("GET", "/cache/stream?q=hello", nil)
+	w := httptest.NewRecorder()
+	
+	srv.ServeHTTP(w, r)
+	
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected 200, got %d", w.Code)
+	}
+	
+	got := w.Body.String()
+	// The response should have "data: {"source":"L1","text":"world "}" etc
+	// We check for some key parts
+	if !strings.Contains(got, "\"source\":\"L1\"") {
+		t.Errorf("SSE output missing expected source: %s", got)
+	}
+	if !strings.Contains(got, "event: done") {
+		t.Errorf("SSE output missing done event: %s", got)
+	}
 }

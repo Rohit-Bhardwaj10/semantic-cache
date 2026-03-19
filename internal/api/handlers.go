@@ -3,10 +3,13 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/cache"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 )
 
 // Handler handles HTTP requests for the semantic cache API.
@@ -27,18 +30,25 @@ func (h *Handler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 
 	var req QueryRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		http.Error(w, "Invalid request body", http.StatusBadRequest)
+		http.Error(w, "Invalid body", http.StatusBadRequest)
+		return
+	}
+
+	if err := req.Validate(); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
 		return
 	}
 
 	// Delegate to coordinator
 	// Extract tenant_id injected by AuthMiddleware
 	tenantID := GetTenantID(r.Context())
+	requestID := GetRequestID(r.Context())
 
 	qReq := cache.QueryRequest{
-		Query:    req.Query,
-		TenantID: tenantID,
-		Domain:   req.Domain,
+		Query:     req.Query,
+		TenantID:  tenantID,
+		Domain:    req.Domain,
+		RequestID: requestID,
 	}
 
 	start := time.Now()
@@ -118,4 +128,88 @@ func (h *Handler) HandleAdminReload(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	fmt.Fprintln(w, "Policies reloaded successfully")
+}
+
+// HandleStreamQuery processes a GET /cache/stream?q=... request using SSE.
+func (h *Handler) HandleStreamQuery(w http.ResponseWriter, r *http.Request) {
+	query := r.URL.Query().Get("q")
+	if query == "" {
+		http.Error(w, "Query parameter 'q' required", http.StatusBadRequest)
+		return
+	}
+
+	tenantID := GetTenantID(r.Context())
+	requestID := GetRequestID(r.Context())
+
+	// Set headers for SSE
+	w.Header().Set("Content-Type", "text/event-stream")
+	w.Header().Set("Cache-Control", "no-cache")
+	w.Header().Set("Connection", "keep-alive")
+	w.Header().Set("Access-Control-Allow-Origin", "*")
+
+	flusher, ok := w.(http.Flusher)
+	if !ok {
+		http.Error(w, "Streaming not supported", http.StatusInternalServerError)
+		return
+	}
+
+	// Call coordinator (For MVP streaming, we'll use non-streaming Query and split response)
+	qReq := cache.QueryRequest{
+		Query:     query,
+		TenantID:  tenantID,
+		RequestID: requestID,
+	}
+	
+	resp, err := h.coord.Query(r.Context(), qReq)
+	if err != nil {
+		fmt.Fprintf(w, "event: error\ndata: %s\n\n", err.Error())
+		flusher.Flush()
+		return
+	}
+
+	// Stream back the answer in chunks to simulate streaming
+	words := strings.Split(resp.Answer, " ")
+	for i, word := range words {
+		chunk := word
+		if i < len(words)-1 {
+			chunk += " "
+		}
+		
+		event := map[string]interface{}{
+			"text":   chunk,
+			"source": resp.Source,
+		}
+		data, _ := json.Marshal(event)
+		fmt.Fprintf(w, "data: %s\n\n", string(data))
+		flusher.Flush()
+		
+		// Small sleep to simulate realistic streaming
+		time.Sleep(50 * time.Millisecond)
+	}
+
+	fmt.Fprintf(w, "event: done\ndata: [DONE]\n\n")
+	flusher.Flush()
+}
+
+// HandleFeedback processes a POST /feedback request.
+func (h *Handler) HandleFeedback(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		RequestID string `json:"request_id"`
+		Correct   bool   `json:"correct"`
+		Reason    string `json:"reason,omitempty"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		http.Error(w, "Invalid body", http.StatusBadRequest)
+		return
+	}
+
+	// In Phase 5 we'll store this in Postgres for the tuner
+	log.Printf("[FEEDBACK] RequestID: %s, Correct: %v, Reason: %s\n", req.RequestID, req.Correct, req.Reason)
+	
+	w.WriteHeader(http.StatusAccepted)
+}
+
+// HandleMetrics exposesprometheus metrics.
+func (h *Handler) HandleMetrics(w http.ResponseWriter, r *http.Request) {
+	promhttp.Handler().ServeHTTP(w, r)
 }

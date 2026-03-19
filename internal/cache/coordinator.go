@@ -9,7 +9,9 @@ import (
 
 	"golang.org/x/sync/singleflight"
 
+	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/audit"
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/backend"
+	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/metrics"
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/policy"
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/resilience"
 	"github.com/Rohit-Bhardwaj10/semantic-cache/pkg/embeddings"
@@ -26,6 +28,8 @@ type Coordinator struct {
 	classifier *policy.DomainClassifier
 	backend    backend.Backend
 	breaker    *resilience.CircuitBreaker
+	audit      *audit.Logger
+	metrics    *metrics.Metrics
 
 	// Group for deduplicating concurrent backend calls
 	sfGroup singleflight.Group
@@ -42,6 +46,8 @@ type Config struct {
 	Classifier *policy.DomainClassifier
 	Backend    backend.Backend
 	Breaker    *resilience.CircuitBreaker
+	Audit      *audit.Logger
+	Metrics    *metrics.Metrics
 }
 
 func NewCoordinator(cfg Config) *Coordinator {
@@ -55,14 +61,17 @@ func NewCoordinator(cfg Config) *Coordinator {
 		classifier: cfg.Classifier,
 		backend:    cfg.Backend,
 		breaker:    cfg.Breaker,
+		audit:      cfg.Audit,
+		metrics:    cfg.Metrics,
 	}
 }
 
 // QueryRequest represents an incoming user query.
 type QueryRequest struct {
-	Query    string
-	TenantID string
-	Domain   string // optional
+	Query     string
+	TenantID  string
+	Domain    string
+	RequestID string
 }
 
 // QueryResponse represents the final result returned to the client.
@@ -88,6 +97,12 @@ func (c *Coordinator) Query(ctx context.Context, req QueryRequest) (*QueryRespon
 	// Step 1: L1 Check (Exact Match)
 	if c.l1 != nil {
 		if ans, ok := c.l1.Get(req.TenantID, normalized); ok {
+			c.logDecision(req, domain, normalized, audit.DecisionL1Hit, "", 0)
+			if c.metrics != nil {
+				c.metrics.CacheHits.WithLabelValues("L1", req.TenantID).Inc()
+				c.metrics.CacheLatency.WithLabelValues("L1").Observe(time.Since(start).Seconds())
+				c.metrics.CacheCostSavedTotal.Add(0.01) // mock saving
+			}
 			return &QueryResponse{
 				Answer:    ans,
 				Source:    "L1",
@@ -105,6 +120,7 @@ func (c *Coordinator) Query(ctx context.Context, req QueryRequest) (*QueryRespon
 			if c.l1 != nil {
 				c.l1.Set(req.TenantID, normalized, ans, 1*time.Hour)
 			}
+			c.logDecision(req, domain, normalized, audit.DecisionL2aHit, "", 0)
 			return &QueryResponse{
 				Answer:    ans,
 				Source:    "L2a",
@@ -138,6 +154,14 @@ func (c *Coordinator) Query(ctx context.Context, req QueryRequest) (*QueryRespon
 						// Semantic Hit!
 						// Backfill L1/L2a
 						c.backfill(ctx, req.TenantID, normalized, candle.Answer)
+						c.logDecision(req, domain, normalized, audit.DecisionL2bAccept, "", confidence)
+						
+						if c.metrics != nil {
+							c.metrics.CacheHits.WithLabelValues("L2b", req.TenantID).Inc()
+							c.metrics.ConfidenceScore.Observe(float64(confidence))
+							c.metrics.CacheLatency.WithLabelValues("L2b").Observe(time.Since(start).Seconds())
+							c.metrics.CacheCostSavedTotal.Add(0.015) // mock saving
+						}
 
 						return &QueryResponse{
 							Answer:     candle.Answer,
@@ -146,6 +170,10 @@ func (c *Coordinator) Query(ctx context.Context, req QueryRequest) (*QueryRespon
 							Confidence: confidence,
 							LatencyMS:  time.Since(start).Milliseconds(),
 						}, nil
+					} else {
+						if c.metrics != nil {
+							c.metrics.PolicyRejections.WithLabelValues("low_confidence", domain).Inc()
+						}
 					}
 				}
 			}
@@ -155,7 +183,17 @@ func (c *Coordinator) Query(ctx context.Context, req QueryRequest) (*QueryRespon
 	// Step 4: Backend Call (with singleflight and circuit breaker)
 	res, err := c.fetchFromBackend(ctx, req.TenantID, normalized, domain, req.Query, emb)
 	if err != nil {
+		if c.metrics != nil {
+			c.metrics.CacheMisses.WithLabelValues(req.TenantID).Inc()
+		}
 		return nil, err
+	}
+
+	c.logDecision(req, domain, normalized, audit.DecisionBackend, "", 0)
+	if c.metrics != nil {
+		c.metrics.CacheMisses.WithLabelValues(req.TenantID).Inc()
+		c.metrics.BackendCalls.WithLabelValues(domain, req.TenantID).Inc()
+		c.metrics.BackendCostTotal.Add(0.02)
 	}
 
 	return &QueryResponse{
@@ -164,6 +202,21 @@ func (c *Coordinator) Query(ctx context.Context, req QueryRequest) (*QueryRespon
 		Hit:       false,
 		LatencyMS: time.Since(start).Milliseconds(),
 	}, nil
+}
+
+func (c *Coordinator) logDecision(req QueryRequest, domain, normalized, decision, reason string, confidence float32) {
+	if c.audit == nil {
+		return
+	}
+	c.audit.Log(audit.LogEvent{
+		RequestID:  req.RequestID,
+		TenantID:   req.TenantID,
+		QueryHash:  audit.HashQuery(normalized),
+		Domain:     domain,
+		Decision:   decision,
+		Reason:     reason,
+		Confidence: confidence,
+	})
 }
 
 func (c *Coordinator) fetchFromBackend(ctx context.Context, tenantID, normalized, domain, original string, embedding []float32) (*backend.Response, error) {
