@@ -14,7 +14,7 @@ func TestDomainClassifier(t *testing.T) {
 		want  string
 	}{
 		{"Weather query", "what is the temperature", "weather"},
-		{"Finance query", "bitcoin price today", "finance"},
+		{"Finance query", "bitcoin price performance", "finance"},
 		{"Medical query", "doctor for symptoms", "medical"},
 		{"Unknown query", "some random query", "general"},
 	}
