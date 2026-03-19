@@ -86,21 +86,25 @@ func (c *Coordinator) Query(ctx context.Context, req QueryRequest) (*QueryRespon
 	}
 
 	// Step 1: L1 Check (Exact Match)
-	if ans, ok := c.l1.Get(req.TenantID, normalized); ok {
-		return &QueryResponse{
-			Answer:    ans,
-			Source:    "L1",
-			Hit:       true,
-			LatencyMS: time.Since(start).Milliseconds(),
-		}, nil
+	if c.l1 != nil {
+		if ans, ok := c.l1.Get(req.TenantID, normalized); ok {
+			return &QueryResponse{
+				Answer:    ans,
+				Source:    "L1",
+				Hit:       true,
+				LatencyMS: time.Since(start).Milliseconds(),
+			}, nil
+		}
 	}
 
 	// Step 2: L2a Check (Redis Exact Match)
 	if c.l2a != nil {
 		ans, err := c.l2a.Get(ctx, req.TenantID, normalized)
 		if err == nil && ans != "" {
-			// Backfill L1
-			c.l1.Set(req.TenantID, normalized, ans, 1*time.Hour)
+			// Backfill L1 if available
+			if c.l1 != nil {
+				c.l1.Set(req.TenantID, normalized, ans, 1*time.Hour)
+			}
 			return &QueryResponse{
 				Answer:    ans,
 				Source:    "L2a",
@@ -111,35 +115,38 @@ func (c *Coordinator) Query(ctx context.Context, req QueryRequest) (*QueryRespon
 	}
 
 	// Step 3: L2b Check (Semantic Match)
-	// First, we need an embedding
-	emb, err := c.embeddings.Embed(ctx, normalized)
-	if err == nil {
-		// Search in Postgres
-		candidates, err := c.l2b.Search(ctx, req.TenantID, emb, 5)
-		if err == nil && len(candidates) > 0 {
-			p := c.policy.GetPolicy(domain)
+	var emb []float32
+	if c.embeddings != nil && c.l2b != nil {
+		var err error
+		emb, err = c.embeddings.Embed(ctx, normalized)
+		if err == nil {
+			// Search in Postgres
+			candidates, err := c.l2b.Search(ctx, req.TenantID, emb, 5)
+			if err == nil && len(candidates) > 0 {
+				p := c.policy.GetPolicy(domain)
 
-			// Check each candidate against policy
-			for _, candle := range candidates {
-				// Temporal check (Step 5.3 in Build Plan)
-				if policy.TemporalClass(normalized) != policy.TemporalClass(candle.QueryNormalized) {
-					continue
-				}
+				// Check each candidate against policy
+				for _, candle := range candidates {
+					// Temporal check (Step 5.3 in Build Plan)
+					if policy.TemporalClass(normalized) != policy.TemporalClass(candle.QueryNormalized) {
+						continue
+					}
 
-				// Scoring (Step 5.2)
-				confidence := policy.CalculateConfidence(candle.Similarity, candle.AgeSeconds(), p)
-				if confidence >= p.ConfidenceThreshold {
-					// Semantic Hit!
-					// Backfill L1/L2a
-					c.backfill(ctx, req.TenantID, normalized, candle.Answer)
+					// Scoring (Step 5.2)
+					confidence := policy.CalculateConfidence(candle.Similarity, candle.AgeSeconds(), p)
+					if confidence >= p.ConfidenceThreshold {
+						// Semantic Hit!
+						// Backfill L1/L2a
+						c.backfill(ctx, req.TenantID, normalized, candle.Answer)
 
-					return &QueryResponse{
-						Answer:     candle.Answer,
-						Source:     "L2b",
-						Hit:        true,
-						Confidence: confidence,
-						LatencyMS:  time.Since(start).Milliseconds(),
-					}, nil
+						return &QueryResponse{
+							Answer:     candle.Answer,
+							Source:     "L2b",
+							Hit:        true,
+							Confidence: confidence,
+							LatencyMS:  time.Since(start).Milliseconds(),
+						}, nil
+					}
 				}
 			}
 		}
