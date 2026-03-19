@@ -171,16 +171,23 @@ func (c *Coordinator) fetchFromBackend(ctx context.Context, tenantID, normalized
 	key := fmt.Sprintf("%s:%s", tenantID, normalized)
 	
 	val, err, _ := c.sfGroup.Do(key, func() (interface{}, error) {
-		// Call backend through circuit breaker
+		// Call backend through circuit breaker if available
 		var resp *backend.Response
-		cbErr := c.breaker.Execute(func() error {
-			var err error
+		var err error
+		
+		if c.breaker != nil {
+			cbErr := c.breaker.Execute(func() error {
+				resp, err = c.backend.Query(ctx, original)
+				return err
+			})
+			if cbErr != nil {
+				return nil, cbErr
+			}
+		} else {
 			resp, err = c.backend.Query(ctx, original)
-			return err
-		})
-
-		if cbErr != nil {
-			return nil, cbErr
+			if err != nil {
+				return nil, err
+			}
 		}
 
 		// Write-through to all tiers asynchronously
@@ -196,9 +203,12 @@ func (c *Coordinator) fetchFromBackend(ctx context.Context, tenantID, normalized
 	return val.(*backend.Response), nil
 }
 
+// persist writes the result to all configured cache tiers.
 func (c *Coordinator) persist(ctx context.Context, tenantID, normalized, original, domain, answer string, embedding []float32) {
 	// 1. L1
-	c.l1.Set(tenantID, normalized, answer, 1*time.Hour)
+	if c.l1 != nil {
+		c.l1.Set(tenantID, normalized, answer, 1*time.Hour)
+	}
 
 	// 2. L2a
 	if c.l2a != nil {
@@ -225,10 +235,20 @@ func (c *Coordinator) persist(ctx context.Context, tenantID, normalized, origina
 
 func (c *Coordinator) backfill(ctx context.Context, tenantID, normalized, answer string) {
 	// Quick backfill to L1 and L2a
-	c.l1.Set(tenantID, normalized, answer, 1*time.Hour)
+	if c.l1 != nil {
+		c.l1.Set(tenantID, normalized, answer, 1*time.Hour)
+	}
 	if c.l2a != nil {
 		go func() {
 			_ = c.l2a.Set(context.Background(), tenantID, normalized, answer, 24*time.Hour)
 		}()
 	}
+}
+
+// ReloadPolicies triggers a reload of the policy configuration file.
+func (c *Coordinator) ReloadPolicies() error {
+	if c.policy == nil {
+		return fmt.Errorf("policy engine not initialized")
+	}
+	return c.policy.Reload()
 }

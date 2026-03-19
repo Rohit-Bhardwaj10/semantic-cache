@@ -14,11 +14,15 @@ type Server struct {
 	httpServer *http.Server
 	mux        *http.ServeMux
 	handler    *Handler
+	limiter    *RateLimiter
 }
 
 func NewServer(addr string, coord *cache.Coordinator) *Server {
 	h := NewHandler(coord)
 	mux := http.NewServeMux()
+
+	// 10 requests per second with a burst of 20 - adjustable
+	rl := NewRateLimiter(10, 20)
 
 	// Register routes
 	mux.HandleFunc("/cache/query", h.HandleQuery)
@@ -26,9 +30,14 @@ func NewServer(addr string, coord *cache.Coordinator) *Server {
 	mux.HandleFunc("/readyz", h.HandleHealth)
 	mux.HandleFunc("/livez", h.HandleHealth)
 	mux.HandleFunc("/analytics/cost-savings", h.HandleAnalytics)
+	
+	// Admin routes
+	mux.HandleFunc("/admin/invalidate", h.HandleAdminInvalidate)
+	mux.HandleFunc("/admin/reload-policies", h.HandleAdminReload)
 
 	// Wrap in middleware chain (applied in reverse order)
 	var finalHandler http.Handler = mux
+	finalHandler = rl.RateLimitMiddleware(finalHandler)
 	finalHandler = AuthMiddleware(finalHandler)
 	finalHandler = LoggerMiddleware(finalHandler)
 	finalHandler = RequestIDMiddleware(finalHandler)
@@ -45,7 +54,13 @@ func NewServer(addr string, coord *cache.Coordinator) *Server {
 		httpServer: srv,
 		mux:        mux,
 		handler:    h,
+		limiter:    rl,
 	}
+}
+
+// ServeHTTP implements the http.Handler interface.
+func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	s.httpServer.Handler.ServeHTTP(w, r)
 }
 
 // Start runs the server until manually stopped or a fatal error occurs.

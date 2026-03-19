@@ -2,14 +2,17 @@ package unit
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/api"
+	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/backend"
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/cache"
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/policy"
+	"github.com/golang-jwt/jwt/v5"
 )
 
 func TestAPI_Query(t *testing.T) {
@@ -68,4 +71,54 @@ func TestAPI_Health(t *testing.T) {
 	if resp.Status != "ready" {
 		t.Errorf("Expected ready, got %s", resp.Status)
 	}
+}
+
+func TestAPI_TenantContext(t *testing.T) {
+	l1 := cache.NewL1Cache(1024)
+	mockBackend := &mockBackend{answer: "backend answer"}
+	
+	coord := cache.NewCoordinator(cache.Config{
+		L1:         l1,
+		Normalizer: cache.NewNormalizer(),
+		Classifier: policy.NewDomainClassifier(),
+		Backend:    mockBackend,
+	})
+	
+	// Create a token for tenant1
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, api.Claims{
+		TenantID: "tenant1",
+	})
+	tokenStr, _ := token.SignedString([]byte("dev-secret-change-in-prod"))
+
+	// Initialize the server with the coordinator
+	srv := api.NewServer(":8080", coord)
+
+	// Since NewServer returns a *api.Server which has internal httpServer,
+	// and we want to test the handler/middleware stack, we'll use the final handler
+	// but api.Server doesn't export the mux or the finalHandler easily.
+	// Oh wait, I can just use srv.ServeHTTP if I implement it or just use httptest.Server
+	
+	// Let's modify NewServer to make testing easier or just recreate parts.
+	
+	reqBody, _ := json.Marshal(api.QueryRequest{Query: "test"})
+	r := httptest.NewRequest("POST", "/cache/query", bytes.NewBuffer(reqBody))
+	r.Header.Set("Authorization", "Bearer "+tokenStr)
+	w := httptest.NewRecorder()
+
+	srv.ServeHTTP(w, r)
+
+	if w.Code != http.StatusOK {
+		t.Errorf("Expected 200 with JWT, got %d", w.Code)
+	}
+}
+
+type mockBackend struct {
+	answer string
+}
+
+func (m *mockBackend) Query(ctx context.Context, query string) (*backend.Response, error) {
+	return &backend.Response{
+		Answer: m.answer,
+		Model:  "mock-gpt",
+	}, nil
 }
