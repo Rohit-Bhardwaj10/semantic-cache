@@ -82,3 +82,22 @@ func (c *L2bCache) Write(ctx context.Context, e *CacheEntry, embedding []float32
 	}
 	return nil
 }
+// GetStoredVersions returns the distinct embedding models and versions currently in the cache.
+func (c *L2bCache) GetStoredVersions(ctx context.Context) ([]struct{ Model, Version string }, error) {
+	query := `SELECT DISTINCT embed_model, embed_version FROM cache_entries`
+	rows, err := c.pool.Query(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query stored versions: %w", err)
+	}
+	defer rows.Close()
+
+	var versions []struct{ Model, Version string }
+	for rows.Next() {
+		var v struct{ Model, Version string }
+		if err := rows.Scan(&v.Model, &v.Version); err != nil {
+			return nil, fmt.Errorf("error scanning version: %w", err)
+		}
+		versions = append(versions, v)
+	}
+	return versions, nil
+}

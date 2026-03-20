@@ -63,6 +63,21 @@ func main() {
 	// 4. Initialize Core Tiers
 	l1 := cache.NewL1Cache(l1MaxBytes)
 	l2b := cache.NewL2bCache(pgPool, "nomic-embed-text", "v1")
+
+	// --- SPRINT 9: Embedding Version Consistency Check ---
+	storedVersions, err := l2b.GetStoredVersions(ctx)
+	if err != nil {
+		log.Printf("Warning: Failed to check stored embedding versions: %v", err)
+	} else {
+		for _, v := range storedVersions {
+			if v.Model != "nomic-embed-text" || v.Version != "v1" {
+				log.Fatalf("CRITICAL: Stored embedding version mismatch! Found (%s, %s), expected (nomic-embed-text, v1). "+
+					"Please migrate or flush the cache to avoid corruption.", v.Model, v.Version)
+			}
+		}
+	}
+	// --- END SPRINT 9 CHECK ---
+
 	auditLogger := audit.NewLogger()
 	promMetrics := metrics.InitMetrics()
 	

@@ -64,6 +64,10 @@ ollama-pull:
 psql:
 	docker exec -it semantic-cache-postgres psql -U cache -d cache
 
+maintenance:
+	docker exec -i semantic-cache-postgres psql -U cache -d cache < scripts/maintenance.sql
+
+
 # ── Redis ────────────────────────────────────────────────────
 redis-cli:
 	docker exec -it semantic-cache-redis redis-cli
@@ -83,7 +87,7 @@ vet:
 
 lint:
 	golangci-lint run ./...
-
+  
 # ── Clean ─────────────────────────────────────────────────────
 clean:
 	rm -f cmd/server/server cmd/server/server.exe

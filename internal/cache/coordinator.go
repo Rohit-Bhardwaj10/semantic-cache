@@ -83,6 +83,13 @@ type QueryResponse struct {
 	LatencyMS  int64
 }
 
+const (
+	// Estimated costs in USD
+	CostBackendPerRequest  = 0.02    // GPT-4 scale
+	CostEmbeddingPerQuery  = 0.0005  // Ollama inference
+	CostInfraPerCacheQuery = 0.0001  // Redis/PG overhead
+)
+
 // Query handles the full multi-tier caching logic.
 func (c *Coordinator) Query(ctx context.Context, req QueryRequest) (*QueryResponse, error) {
 	start := time.Now()
@@ -101,7 +108,8 @@ func (c *Coordinator) Query(ctx context.Context, req QueryRequest) (*QueryRespon
 			if c.metrics != nil {
 				c.metrics.CacheHits.WithLabelValues("L1", req.TenantID).Inc()
 				c.metrics.CacheLatency.WithLabelValues("L1").Observe(time.Since(start).Seconds())
-				c.metrics.CacheCostSavedTotal.Add(0.01) // mock saving
+				// Net savings: backend cost - infra cost (already embedded in memory)
+				c.metrics.CacheCostSavedTotal.Add(CostBackendPerRequest - CostInfraPerCacheQuery)
 			}
 			return &QueryResponse{
 				Answer:    ans,
@@ -121,6 +129,11 @@ func (c *Coordinator) Query(ctx context.Context, req QueryRequest) (*QueryRespon
 				c.l1.Set(req.TenantID, normalized, ans, 1*time.Hour)
 			}
 			c.logDecision(req, domain, normalized, audit.DecisionL2aHit, "", 0)
+			if c.metrics != nil {
+				c.metrics.CacheHits.WithLabelValues("L2a", req.TenantID).Inc()
+				c.metrics.CacheLatency.WithLabelValues("L2a").Observe(time.Since(start).Seconds())
+				c.metrics.CacheCostSavedTotal.Add(CostBackendPerRequest - CostInfraPerCacheQuery)
+			}
 			return &QueryResponse{
 				Answer:    ans,
 				Source:    "L2a",
@@ -160,7 +173,8 @@ func (c *Coordinator) Query(ctx context.Context, req QueryRequest) (*QueryRespon
 							c.metrics.CacheHits.WithLabelValues("L2b", req.TenantID).Inc()
 							c.metrics.ConfidenceScore.Observe(float64(confidence))
 							c.metrics.CacheLatency.WithLabelValues("L2b").Observe(time.Since(start).Seconds())
-							c.metrics.CacheCostSavedTotal.Add(0.015) // mock saving
+							// Net savings: backend cost - (embedding cost + infra cost)
+							c.metrics.CacheCostSavedTotal.Add(CostBackendPerRequest - (CostEmbeddingPerQuery + CostInfraPerCacheQuery))
 						}
 
 						return &QueryResponse{
@@ -193,8 +207,9 @@ func (c *Coordinator) Query(ctx context.Context, req QueryRequest) (*QueryRespon
 	if c.metrics != nil {
 		c.metrics.CacheMisses.WithLabelValues(req.TenantID).Inc()
 		c.metrics.BackendCalls.WithLabelValues(domain, req.TenantID).Inc()
-		c.metrics.BackendCostTotal.Add(0.02)
+		c.metrics.BackendCostTotal.Add(CostBackendPerRequest)
 	}
+
 
 	return &QueryResponse{
 		Answer:    res.Answer,
@@ -305,3 +320,60 @@ func (c *Coordinator) ReloadPolicies() error {
 	}
 	return c.policy.Reload()
 }
+
+// CheckHealth performs a deep health check of all dependencies.
+func (c *Coordinator) CheckHealth(ctx context.Context) (map[string]interface{}, bool) {
+	status := map[string]interface{}{
+		"status":   "ready",
+		"services": make(map[string]interface{}),
+	}
+	ready := true
+
+	services := status["services"].(map[string]interface{})
+
+	// 1. Redis check
+	if c.l2a != nil && c.l2a.Client != nil {
+		start := time.Now()
+		err := c.l2a.Client.Ping(ctx).Err()
+		services["redis"] = map[string]interface{}{
+			"ok":         err == nil,
+			"latency_ms": time.Since(start).Milliseconds(),
+		}
+		if err != nil {
+			ready = false
+		}
+	}
+
+	// 2. Postgres check
+	if c.l2b != nil && c.l2b.pool != nil {
+		start := time.Now()
+		err := c.l2b.pool.Ping(ctx)
+		services["postgres"] = map[string]interface{}{
+			"ok":         err == nil,
+			"latency_ms": time.Since(start).Milliseconds(),
+		}
+		if err != nil {
+			ready = false
+		}
+	}
+
+	// 3. Ollama check
+	if c.embeddings != nil {
+		start := time.Now()
+		ok := c.embeddings.IsHealthy(ctx)
+		services["ollama"] = map[string]interface{}{
+			"ok":         ok,
+			"latency_ms": time.Since(start).Milliseconds(),
+		}
+		if !ok {
+			ready = false
+		}
+	}
+
+	if !ready {
+		status["status"] = "not_ready"
+	}
+
+	return status, ready
+}
+

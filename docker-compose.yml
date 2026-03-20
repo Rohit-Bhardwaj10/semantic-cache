@@ -1,4 +1,4 @@
-version: "3.9"
+
 
 # ──────────────────────────────────────────────────────────────
 #  semantic-cache — local development environment
@@ -122,6 +122,8 @@ services:
       - "--web.enable-lifecycle"    # enables POST /-/reload
     volumes:
       - ./configs/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./configs/alerts.yaml:/etc/prometheus/alerts.yml:ro
+
       - prometheusdata:/prometheus
     ports:
       - "9091:9090"   # Prometheus UI at http://localhost:9091
@@ -148,6 +150,18 @@ services:
       - ./configs/grafana/provisioning:/etc/grafana/provisioning:ro
     depends_on:
       - prometheus
+    restart: unless-stopped
+    networks:
+      - cache-net
+
+  # ── 7. Mock Backend (LLM API Simulation) ──────────────────────
+  mock-backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.mock
+    container_name: semantic-cache-mock-backend
+    ports:
+      - "8081:8081"
     restart: unless-stopped
     networks:
       - cache-net

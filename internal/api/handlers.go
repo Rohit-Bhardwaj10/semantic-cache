@@ -1,6 +1,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -71,17 +72,27 @@ func (h *Handler) HandleQuery(w http.ResponseWriter, r *http.Request) {
 	_ = json.NewEncoder(w).Encode(resp)
 }
 
-// HandleHealth process a GET /health or /readyz (shallow vs deep) request.
+// HandleHealth processes GET /health (shallow) or /readyz (deep) requests.
 func (h *Handler) HandleHealth(w http.ResponseWriter, r *http.Request) {
-	resp := HealthResponse{
-		Status: "ready",
+	if r.URL.Path == "/health" || r.URL.Path == "/livez" {
+		w.Header().Set("Content-Type", "application/json")
+		_ = json.NewEncoder(w).Encode(HealthResponse{Status: "ready"})
+		return
 	}
 
-	// In Sprint 5, we'll implement deep health checks later
-	// For now, return OK.
+	// Deep check for /readyz
+	ctx, cancel := context.WithTimeout(r.Context(), 5*time.Second)
+	defer cancel()
+
+	status, ready := h.coord.CheckHealth(ctx)
+	
 	w.Header().Set("Content-Type", "application/json")
-	_ = json.NewEncoder(w).Encode(resp)
+	if !ready {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}
+	_ = json.NewEncoder(w).Encode(status)
 }
+
 
 // HandleAnalytics processes a GET /analytics/cost-savings request.
 func (h *Handler) HandleAnalytics(w http.ResponseWriter, r *http.Request) {

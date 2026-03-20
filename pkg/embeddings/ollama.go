@@ -121,3 +121,19 @@ func (c *Client) Embed(ctx context.Context, text string) ([]float32, error) {
 
 	return result, nil
 }
+
+// IsHealthy checks if the Ollama server is reachable.
+func (c *Client) IsHealthy(ctx context.Context) bool {
+	// Simple reachability check (GET base URL)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL, nil)
+	if err != nil {
+		return false
+	}
+	resp, err := c.HTTPClient.Do(req)
+	if err != nil {
+		return false
+	}
+	defer resp.Body.Close()
+	return resp.StatusCode == http.StatusOK
+}
+
