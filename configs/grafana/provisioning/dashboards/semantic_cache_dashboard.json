@@ -1,206 +1,434 @@
 {
-  "annotations": {
-    "list": [
-      {
-        "builtIn": 1,
-        "datasource": "-- Grafana --",
-        "enable": true,
-        "hide": true,
-        "iconColor": "rgba(0, 211, 255, 1)",
-        "name": "Annotations & Alerts",
-        "target": {
-          "limit": 100,
-          "matchAny": false,
-          "tags": [],
-          "type": "dashboard"
-        },
-        "type": "dashboard"
-      }
-    ]
-  },
+  "annotations": { "list": [] },
   "editable": true,
   "fiscalYearStartMonth": 0,
-  "graphTooltip": 0,
+  "graphTooltip": 1,
   "id": 1,
   "links": [],
-  "liveNow": false,
+  "liveNow": true,
   "panels": [
+
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 0 },
+      "id": 100,
+      "title": "Live Traffic Overview",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "custom": {
-            "axisLabel": "",
-            "axisPlacement": "auto",
-            "barAlignment": 0,
-            "drawStyle": "line",
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "hideFrom": {
-              "legend": false,
-              "tooltip": false,
-              "viz": false
-            },
-            "lineInterpolation": "linear",
-            "lineWidth": 2,
-            "pointSize": 5,
-            "scaleDistribution": {
-              "type": "linear"
-            },
-            "showPoints": "auto",
-            "spanNulls": false,
-            "stacking": {
-              "group": "A",
-              "mode": "none"
-            },
-            "thresholdsStyle": {
-              "mode": "off"
-            }
-          },
+          "color": { "fixedColor": "green", "mode": "fixed" },
           "mappings": [],
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "unit": "percent"
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }, { "color": "orange", "value": 0.7 }] },
+          "unit": "percentunit",
+          "min": 0, "max": 1
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 0
-      },
-      "id": 2,
-      "options": {
-        "legend": {
-          "calcs": [],
-          "displayMode": "list",
-          "placement": "bottom"
-        },
-        "tooltip": {
-          "mode": "single",
-          "sort": "none"
-        }
-      },
-      "targets": [
-        {
-          "datasource": {
-            "uid": "PBFA97CFB590B2093"
-          },
-          "expr": "sum(rate(cache_hits_total[5m])) / (sum(rate(cache_hits_total[5m])) + sum(rate(cache_misses_total[5m]))) * 100",
-          "legendFormat": "Global Hit Rate",
-          "refId": "A"
-        }
-      ],
-      "title": "Cache Hit Rate (%)",
-      "type": "timeseries"
+      "gridPos": { "h": 4, "w": 4, "x": 0, "y": 1 },
+      "id": 1,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{
+        "datasource": { "uid": "PBFA97CFB590B2093" },
+        "expr": "sum(rate(cache_hits_total[2m])) / (sum(rate(cache_hits_total[2m])) + sum(rate(cache_misses_total[2m])))",
+        "legendFormat": "Hit Rate",
+        "refId": "A"
+      }],
+      "title": "Cache Hit Rate",
+      "type": "stat"
     },
+
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
-      },
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": { "defaults": { "color": { "fixedColor": "green", "mode": "fixed" }, "mappings": [], "unit": "currencyUSD" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 4, "x": 4, "y": 1 },
+      "id": 2,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{
+        "datasource": { "uid": "PBFA97CFB590B2093" },
+        "expr": "cache_cost_saved_usd_total",
+        "legendFormat": "",
+        "refId": "A"
+      }],
+      "title": "Net Cost Saved",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": { "defaults": { "color": { "fixedColor": "blue", "mode": "fixed" }, "mappings": [], "unit": "reqps" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 4, "x": 8, "y": 1 },
+      "id": 3,
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{
+        "datasource": { "uid": "PBFA97CFB590B2093" },
+        "expr": "sum(rate(cache_hits_total[1m])) + sum(rate(cache_misses_total[1m]))",
+        "legendFormat": "QPS",
+        "refId": "A"
+      }],
+      "title": "Requests / sec",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": { "defaults": { "color": { "fixedColor": "purple", "mode": "fixed" }, "mappings": [], "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 4, "x": 12, "y": 1 },
+      "id": 4,
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{
+        "datasource": { "uid": "PBFA97CFB590B2093" },
+        "expr": "sum(cache_hits_total)",
+        "legendFormat": "Total Hits",
+        "refId": "A"
+      }],
+      "title": "Total Cache Hits",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": { "defaults": { "color": { "fixedColor": "orange", "mode": "fixed" }, "mappings": [], "unit": "short" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 4, "x": 16, "y": 1 },
+      "id": 5,
+      "options": { "colorMode": "background", "graphMode": "area", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{
+        "datasource": { "uid": "PBFA97CFB590B2093" },
+        "expr": "sum(backend_calls_total)",
+        "legendFormat": "Backend Calls",
+        "refId": "A"
+      }],
+      "title": "Backend Calls (LLM)",
+      "type": "stat"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": { "defaults": { "color": { "fixedColor": "red", "mode": "fixed" }, "mappings": [], "unit": "currencyUSD" }, "overrides": [] },
+      "gridPos": { "h": 4, "w": 4, "x": 20, "y": 1 },
+      "id": 6,
+      "options": { "colorMode": "background", "graphMode": "none", "justifyMode": "center", "orientation": "auto", "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false }, "textMode": "auto" },
+      "targets": [{
+        "datasource": { "uid": "PBFA97CFB590B2093" },
+        "expr": "backend_cost_usd_total",
+        "legendFormat": "",
+        "refId": "A"
+      }],
+      "title": "Backend Cost Incurred",
+      "type": "stat"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 5 },
+      "id": 101,
+      "title": "Cache Hit Rate & Tier Breakdown",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
       "fieldConfig": {
         "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "", "axisPlacement": "auto", "drawStyle": "line", "fillOpacity": 15, "gradientMode": "none", "lineInterpolation": "smooth", "lineWidth": 2, "pointSize": 4, "showPoints": "auto", "spanNulls": true },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}] },
+          "unit": "percentunit", "min": 0, "max": 1
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 14, "x": 0, "y": 6 },
+      "id": 10,
+      "options": { "legend": { "calcs": ["mean", "lastNotNull", "max"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        {
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "sum(rate(cache_hits_total[2m])) / (sum(rate(cache_hits_total[2m])) + sum(rate(cache_misses_total[2m])))",
+          "legendFormat": "Global Hit Rate",
+          "refId": "A"
+        },
+        {
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "sum(rate(cache_hits_total{tier=\"L1\"}[2m])) / (sum(rate(cache_hits_total[2m])) + sum(rate(cache_misses_total[2m])))",
+          "legendFormat": "L1 (in-memory)",
+          "refId": "B"
+        },
+        {
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "sum(rate(cache_hits_total{tier=\"L2b\"}[2m])) / (sum(rate(cache_hits_total[2m])) + sum(rate(cache_misses_total[2m])))",
+          "legendFormat": "L2b (vector)",
+          "refId": "C"
+        }
+      ],
+      "title": "Cache Hit Rate (%) — Live",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" }, "mappings": [], "unit": "short" },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 10, "x": 14, "y": 6 },
+      "id": 11,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "right" }, "pieType": "donut", "tooltip": { "mode": "single" } },
+      "targets": [
+        {
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "sum(cache_hits_total{tier=\"L1\"})",
+          "legendFormat": "L1 In-Memory",
+          "refId": "A"
+        },
+        {
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "sum(cache_hits_total{tier=\"L2a\"})",
+          "legendFormat": "L2a Redis",
+          "refId": "B"
+        },
+        {
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "sum(cache_hits_total{tier=\"L2b\"})",
+          "legendFormat": "L2b Postgres Vector",
+          "refId": "C"
+        },
+        {
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "sum(cache_misses_total)",
+          "legendFormat": "Backend Misses",
+          "refId": "D"
+        }
+      ],
+      "title": "Hit Distribution by Tier",
+      "type": "piechart"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 14 },
+      "id": 102,
+      "title": "Latency — Tier-by-Tier",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "axisLabel": "Latency", "drawStyle": "line", "fillOpacity": 10, "gradientMode": "none", "lineInterpolation": "smooth", "lineWidth": 2, "spanNulls": true },
+          "mappings": [],
+          "thresholds": { "mode": "absolute", "steps": [{"color": "green", "value": null}, {"color": "red", "value": 0.7}] },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 15 },
+      "id": 20,
+      "options": { "legend": { "calcs": ["mean", "max", "lastNotNull"], "displayMode": "table", "placement": "right" }, "tooltip": { "mode": "multi", "sort": "desc" } },
+      "targets": [
+        {
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "histogram_quantile(0.50, sum by (le, tier) (rate(cache_latency_seconds_bucket[2m])))",
+          "legendFormat": "P50 {{tier}}",
+          "refId": "A"
+        },
+        {
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "histogram_quantile(0.95, sum by (le, tier) (rate(cache_latency_seconds_bucket[2m])))",
+          "legendFormat": "P95 {{tier}}",
+          "refId": "B"
+        },
+        {
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "histogram_quantile(0.99, sum by (le, tier) (rate(cache_latency_seconds_bucket[2m])))",
+          "legendFormat": "P99 {{tier}}",
+          "refId": "C"
+        }
+      ],
+      "title": "Latency Percentiles by Cache Tier (P50 / P95 / P99)",
+      "type": "timeseries"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 23 },
+      "id": 103,
+      "title": "Cost & Policy Analysis",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "bars", "fillOpacity": 60, "lineWidth": 1, "spanNulls": false },
           "mappings": [],
           "unit": "currencyUSD"
         },
         "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 6,
-        "x": 12,
-        "y": 0
-      },
-      "id": 4,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "area",
-        "justifyMode": "auto",
-        "orientation": "auto",
-        "reduceOptions": {
-          "calcs": ["lastNotNull"],
-          "fields": "",
-          "values": false
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 24 },
+      "id": 30,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        {
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "rate(cache_cost_saved_usd_total[2m])",
+          "legendFormat": "Cost Saved / sec",
+          "refId": "A"
         },
-        "textMode": "auto"
-      },
-      "targets": [
         {
-          "datasource": {
-            "uid": "PBFA97CFB590B2093"
-          },
-          "expr": "cache_cost_saved_usd_total",
-          "refId": "A"
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "rate(backend_cost_usd_total[2m])",
+          "legendFormat": "Cost Incurred / sec",
+          "refId": "B"
         }
       ],
-      "title": "Net Cost Saved",
-      "type": "stat"
+      "title": "Cost Flow: Saved vs Incurred (USD/sec)",
+      "type": "timeseries"
     },
+
     {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "PBFA97CFB590B2093"
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "spanNulls": true },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
       },
-      "gridPos": {
-        "h": 8,
-        "w": 12,
-        "x": 0,
-        "y": 8
-      },
-      "id": 6,
-      "options": {
-        "legend": {
-          "calcs": ["mean", "max"],
-          "displayMode": "table",
-          "placement": "bottom"
-        }
-      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 24 },
+      "id": 31,
+      "options": { "legend": { "calcs": ["lastNotNull", "sum"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "none" } },
       "targets": [
         {
-          "datasource": {
-            "uid": "PBFA97CFB590B2093"
-          },
-          "expr": "histogram_quantile(0.95, sum by (le, tier) (rate(cache_latency_seconds_bucket[5m])))",
-          "legendFormat": "P95 {{tier}}",
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "sum by (reason, domain) (rate(policy_rejection_total[2m]))",
+          "legendFormat": "Rejected: {{reason}} / {{domain}}",
           "refId": "A"
         }
       ],
-      "title": "P95 Latency by Tier",
+      "title": "Policy Rejections (stale / low-confidence) by Domain",
+      "type": "timeseries"
+    },
+
+    {
+      "collapsed": false,
+      "gridPos": { "h": 1, "w": 24, "x": 0, "y": 32 },
+      "id": 104,
+      "title": "Backend & Embedding Telemetry",
+      "type": "row"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "spanNulls": true },
+          "mappings": [],
+          "unit": "reqps"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 33 },
+      "id": 40,
+      "options": { "legend": { "calcs": ["mean", "lastNotNull"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        {
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "sum by (domain) (rate(backend_calls_total[2m]))",
+          "legendFormat": "Backend → {{domain}}",
+          "refId": "A"
+        }
+      ],
+      "title": "Backend Calls Rate by Domain",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "line", "fillOpacity": 10, "lineWidth": 2, "spanNulls": true },
+          "mappings": [],
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 33 },
+      "id": 41,
+      "options": { "legend": { "calcs": ["mean", "max"], "displayMode": "table", "placement": "bottom" }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        {
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(embedding_duration_seconds_bucket[2m])))",
+          "legendFormat": "P95 Embed time",
+          "refId": "A"
+        },
+        {
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(embedding_duration_seconds_bucket[2m])))",
+          "legendFormat": "P50 Embed time",
+          "refId": "B"
+        }
+      ],
+      "title": "Ollama Embedding Duration (P50/P95)",
+      "type": "timeseries"
+    },
+
+    {
+      "datasource": { "type": "prometheus", "uid": "PBFA97CFB590B2093" },
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "palette-classic" },
+          "custom": { "drawStyle": "bars", "fillOpacity": 60, "lineWidth": 1, "spanNulls": false },
+          "mappings": [],
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": { "h": 8, "w": 24, "x": 0, "y": 41 },
+      "id": 42,
+      "options": { "legend": { "calcs": ["lastNotNull"], "displayMode": "table", "placement": "right" }, "tooltip": { "mode": "multi", "sort": "none" } },
+      "targets": [
+        {
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "histogram_quantile(0.95, sum by (le) (rate(l2b_confidence_score_bucket[2m])))",
+          "legendFormat": "P95 Semantic Confidence",
+          "refId": "A"
+        },
+        {
+          "datasource": { "uid": "PBFA97CFB590B2093" },
+          "expr": "histogram_quantile(0.50, sum by (le) (rate(l2b_confidence_score_bucket[2m])))",
+          "legendFormat": "P50 Semantic Confidence",
+          "refId": "B"
+        }
+      ],
+      "title": "L2b Semantic Confidence Score Distribution",
       "type": "timeseries"
     }
+
   ],
+  "refresh": "5s",
   "schemaVersion": 36,
   "style": "dark",
   "tags": ["semantic-cache", "mvp"],
-  "templating": {
-    "list": []
-  },
-  "time": {
-    "from": "now-6h",
-    "to": "now"
-  },
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
   "timepicker": {},
   "timezone": "",
   "title": "Semantic Cache Mission Control",
   "uid": "semcache-mvp",
-  "version": 1,
+  "version": 2,
   "weekStart": ""
 }
