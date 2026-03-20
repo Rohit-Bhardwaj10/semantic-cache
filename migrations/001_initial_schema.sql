@@ -15,39 +15,20 @@ CREATE EXTENSION IF NOT EXISTS vector;
 -- ============================================================
 CREATE TABLE IF NOT EXISTS cache_entries (
     id               BIGSERIAL    PRIMARY KEY,
-
-    -- Tenant isolation: every row belongs to exactly one tenant.
-    -- Defaults to 'default' for single-tenant deployments.
     tenant_id        TEXT         NOT NULL DEFAULT 'default',
-
-    -- The original query text as received from the client.
-    query_original   TEXT         NOT NULL,
-
-    -- L0-normalized form used as the L2a Redis key.
+    query_raw        TEXT         NOT NULL,
     query_normalized TEXT         NOT NULL,
-
-    -- Domain (weather / finance / general / …) for policy lookup.
+    query_hash       TEXT         NOT NULL,
     query_domain     TEXT         NOT NULL DEFAULT 'general',
-
-    -- 768-dimensional embedding from nomic-embed-text.
     embedding        VECTOR(768)  NOT NULL,
-
-    -- Embedding model metadata — used to detect version drift.
-    -- If these change, existing embeddings are incompatible.
     embed_model      TEXT         NOT NULL DEFAULT 'nomic-embed-text',
     embed_version    TEXT         NOT NULL DEFAULT 'v1',
-
-    -- The cached answer returned to the client.
     answer           TEXT         NOT NULL,
-
-    -- How long this entry is considered fresh (seconds).
-    -- Confidence scorer uses this for the freshness decay term.
     ttl_seconds      INTEGER      NOT NULL DEFAULT 3600,
-
-    -- Timestamps
     created_at       TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
-    last_accessed_at TIMESTAMPTZ,           -- updated on every cache hit
-    access_count     INTEGER      NOT NULL DEFAULT 0
+    last_accessed_at TIMESTAMPTZ,
+    access_count     INTEGER      NOT NULL DEFAULT 0,
+    UNIQUE(tenant_id, query_hash)
 );
 
 -- ── Indexes ──────────────────────────────────────────────────

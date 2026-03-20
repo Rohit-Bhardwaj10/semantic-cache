@@ -37,13 +37,16 @@ func NewServer(addr string, coord *cache.Coordinator) *Server {
 	// Admin routes
 	mux.HandleFunc("/admin/invalidate", h.HandleAdminInvalidate)
 	mux.HandleFunc("/admin/reload-policies", h.HandleAdminReload)
+	mux.HandleFunc("/admin/loadgen/start", h.HandleLoadgenStart)
+	mux.HandleFunc("/admin/loadgen/stop", h.HandleLoadgenStop)
 
-	// Wrap in middleware chain (applied in reverse order)
+	// Wrap in middleware chain (Outer to Inner: CORS -> ReqID -> Logger -> Auth -> RateLimit -> Mux)
 	var finalHandler http.Handler = mux
 	finalHandler = rl.RateLimitMiddleware(finalHandler)
 	finalHandler = AuthMiddleware(finalHandler)
 	finalHandler = LoggerMiddleware(finalHandler)
 	finalHandler = RequestIDMiddleware(finalHandler)
+	finalHandler = CORSMiddleware(finalHandler)
 
 	srv := &http.Server{
 		Addr:         addr,

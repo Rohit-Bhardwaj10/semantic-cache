@@ -11,11 +11,15 @@ import (
 
 	"github.com/Rohit-Bhardwaj10/semantic-cache/internal/cache"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"os/exec"
+	"sync"
 )
 
 // Handler handles HTTP requests for the semantic cache API.
 type Handler struct {
-	coord *cache.Coordinator
+	coord    *cache.Coordinator
+	lgMu     sync.Mutex
+	lgCmd    *exec.Cmd
 }
 
 func NewHandler(coord *cache.Coordinator) *Handler {
@@ -223,4 +227,50 @@ func (h *Handler) HandleFeedback(w http.ResponseWriter, r *http.Request) {
 // HandleMetrics exposesprometheus metrics.
 func (h *Handler) HandleMetrics(w http.ResponseWriter, r *http.Request) {
 	promhttp.Handler().ServeHTTP(w, r)
+}
+
+// HandleLoadgenStart processes a POST /admin/loadgen/start request.
+func (h *Handler) HandleLoadgenStart(w http.ResponseWriter, r *http.Request) {
+	h.lgMu.Lock()
+	defer h.lgMu.Unlock()
+
+	if h.lgCmd != nil {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status": "already running"}`))
+		return
+	}
+
+	cmd := exec.Command("go", "run", "./cmd/loadgen/")
+	// Assuming it's running in the semantic-cache folder where cmd/loadgen exists
+	err := cmd.Start()
+	if err != nil {
+		http.Error(w, "Failed to start load generator", http.StatusInternalServerError)
+		return
+	}
+
+	h.lgCmd = cmd
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status": "started"}`))
+}
+
+// HandleLoadgenStop processes a POST /admin/loadgen/stop request.
+func (h *Handler) HandleLoadgenStop(w http.ResponseWriter, r *http.Request) {
+	h.lgMu.Lock()
+	defer h.lgMu.Unlock()
+
+	if h.lgCmd == nil {
+		w.WriteHeader(http.StatusOK)
+		w.Write([]byte(`{"status": "not running"}`))
+		return
+	}
+
+	if err := h.lgCmd.Process.Kill(); err != nil {
+		http.Error(w, "Failed to kill load generator", http.StatusInternalServerError)
+		return
+	}
+	h.lgCmd.Process.Wait()
+	h.lgCmd = nil
+
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(`{"status": "stopped"}`))
 }
